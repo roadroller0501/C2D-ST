@@ -4,7 +4,7 @@ This is the official repository for **C2D-ST: A Continuous 2D Spectral–Tempora
 
 ## Status
 
-Additional implementation details may be made available in this repository.
+Additional implementation details will be made available in this repository.
 
 ## License
 

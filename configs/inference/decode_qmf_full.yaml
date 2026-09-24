@@ -1,0 +1,11 @@
+# embedding extraction
+# full length
+num_workers: 1
+valid_batch_size: 1
+target_duration: -2560  # seconds
+num_eval: 1
+average_embd: true
+
+# quality measure function
+qmf_dur_thresh: 6
+qmf_num_trial_per_condition: 10000

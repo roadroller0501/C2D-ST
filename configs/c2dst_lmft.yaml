@@ -1,0 +1,171 @@
+# C2D-ST: large-margin fine-tuning (6 s crops, no augmentation, 2 epochs), initialised from c2dst_pretrain.
+
+# Frontend
+frontend: melspec_torch_fix
+frontend_conf:
+    preemp: true
+    n_fft: 512
+    log: true
+    win_length: 400
+    hop_length: 160
+    f_min: 20
+    f_max: 7600
+    n_mels: 80
+    normalize: mvn
+
+# initialise from the pretraining run (final-epoch weights)
+init_param:
+- exp/spk_c2dst_pretrain_raw_sp/latest.pth
+
+# Encoder
+encoder: redimnat1_encoder
+encoder_conf:
+  #redim
+  stem_size: 32
+  stem_kernel_size:
+  - 3
+  - 2
+  stem_stride:
+  - 1
+  - 2
+  stem_padding:
+  - 1
+  - 0
+  stage_config: 's5_d2-2_s_16l_k7_div24_div48_g1'
+  na_type_2d: 'nattn2d_decay_rpb_v1'
+  ga_type_2d: 'axial_static_v1'
+  ffn_2d_type: 'swiglu'
+  redim_mult: 4
+  ls_init_2d: 0.00001
+  redim_stem_norm_in_type: "bn"
+  redim_proj_norm_in_type: "bn"
+  redim_proj_norm_out_type: "bn"
+  redim_fin_norm_type: "bn"
+  redim_block_norm_type: "ln"
+  redim_aggregation_type: 'ws2d'
+  redim_post_post_norm: false
+  #1d transformer
+  output_size_1d: 144
+  nattn_heads_1d: 9
+  gattn_heads_1d: 3
+  linear_units_1d: 576
+  kernel_size_1d: 31
+  num_blocks_1d: 8
+  gattn_freq_1d: 4
+  mfa_freq: 1
+  nattn_type_1d: "nattn1d_decay_rpb_v1"
+  gattn_type_1d: "gattn1d_static_v1"
+  norm_1d_type: "ln"
+  ffn_1d_type: "swiglu"
+  ls_init_1d: 0.00001
+  fin_norm_1d_type: "identity"
+  #share
+  drop_path_rate: 0.1
+  drop_path_policy: linear
+  activation_type: swish
+  init_style: v5
+  mfa: true
+  extra_type: ntk
+  extra_len: 300
+
+# Pooling
+pooling: chn_attn_stat
+
+# Projector
+projector: rawnet3
+projector_conf:
+  output_size: 192
+
+
+# Preprocessor
+preprocessor: spkfull
+preprocessor_conf:
+  target_duration: 6.0  # seconds
+  sample_rate: 16000
+  num_eval: 3
+  noise_apply_prob: 0.0
+  noise_info:
+  - [1.0, 'dump/raw/musan_speech.scp', [4, 7], [13, 20]]
+  - [1.0, 'dump/raw/musan_noise.scp', [1, 1], [0, 15]]
+  - [1.0, 'dump/raw/musan_music.scp', [1, 1], [5, 15]]
+  rir_apply_prob: 0.0
+  rir_scp: dump/raw/rirs.scp
+
+# Model config
+model_conf:
+  extract_feats_in_collect_stats: false
+
+# Loss
+loss: sphereface2
+loss_conf:
+  margin: 0.3
+  scale: 32
+  t: 3
+  lambda_: 0.7
+  jt: true
+
+# Training related
+max_epoch: 2
+num_att_plot: 0
+cudnn_deterministic: False
+cudnn_benchmark: True
+drop_last_iter: True
+iterator_type: random
+valid_iterator_type: sequence
+shuffle_within_batch: False
+log_interval: 100
+# test
+# num_workers: 2
+# batch_size: 2
+# accum_grad: 2
+# num_iters_per_epoch: 100000
+# valid_batch_size: 2
+#2gpu
+# num_workers: 8
+# batch_size: 32
+# accum_grad: 12
+# num_iters_per_epoch: 34125
+# valid_batch_size: 16
+#4gpu
+num_workers: 8
+batch_size: 64
+accum_grad: 6
+num_iters_per_epoch: 17062
+valid_batch_size: 32
+#8gpu
+# num_workers: 8
+# batch_size: 128
+# accum_grad: 3
+# num_iters_per_epoch: 8531
+# valid_batch_size: 64
+#
+use_amp: True
+keep_nbest_models: 3
+grad_clip: 9999
+best_model_criterion:
+- - valid
+  - eer
+  - min
+
+# Optimizer
+optim: adamw
+optim_conf:
+  lr: 0.0003
+  weight_decay: 0.05
+  amsgrad: False
+
+#no weight decay
+exclude_weight_decay: true
+exclude_weight_decay_conf:
+  normalization_weight_decay: false
+  bias_weight_decay: false
+
+# Scheduler
+scheduler: CosineAnnealingWarmupRestartsFix
+scheduler_conf:
+  first_cycle_steps: 5688
+  cycle_mult: 2.0
+  max_lr: 0.0003
+  min_lr: 0.00000003
+  warmup_steps: 569
+  gamma: 1.0

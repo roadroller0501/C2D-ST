@@ -1,0 +1,7 @@
+# embedding extraction
+# full length
+num_workers: 1
+valid_batch_size: 1
+target_duration: -2560  # seconds
+num_eval: 1
+average_embd: true

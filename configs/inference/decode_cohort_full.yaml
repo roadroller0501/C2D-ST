@@ -1,0 +1,16 @@
+# embedding extraction
+# full length
+num_workers: 1
+valid_batch_size: 1
+target_duration: -2560  # seconds
+num_eval: 1
+average_embd: true
+# score norm
+# num_cohort_spk: 1211
+# num_cohort_spk: 7205
+num_cohort_spk: 5994
+num_utt_per_spk: 10
+utt_select_sec: 0
+
+per_spk_select_order: shuffle
+# per_spk_select_order in {"shuffle", "duration_desc", "duration_asc"}

@@ -181,4 +181,5 @@ Expect small deviations from the reported EERs rather than identical numbers.
 
 ## License
 
-The configuration files and documentation on this page are released under the Apache-2.0 license.
+The configuration files and documentation in this repository are released under the
+[Apache License 2.0](LICENSE).

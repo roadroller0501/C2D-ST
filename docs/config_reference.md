@@ -123,7 +123,7 @@ local window in axial/global attention), `input_diversity = false`, `pcf_groups_
 | `s` | width set: 48, 72, 96, 144, 192 |
 | `16l` | 16 backbone blocks: 3, 3, 3, 3, 4 per stage |
 | `k7` | 7×7 neighborhood window |
-| `div24`, `div48` | NA heads = width/24, axial heads per axis = width/48 |
+| `div24`, `div48` | NA heads = width/24; axial heads per axis = 1/1/2/3/4 (`div48` is the naming convention — stage 2 rounds 72/48 down to 1 head with `d_h = 36`) |
 | `g1` / `g0` | one axial block per stage, placed last / no axial block (all blocks NA) |
 
 Full table: spec §2.2.
@@ -229,12 +229,12 @@ scheduler_conf:
 | | `num_cohort_spk` | 5994 | Number of VoxCeleb2-dev speakers used as cohort (all). |
 | | `num_utt_per_spk` | 10 | Utterances selected per cohort speaker. |
 | | `utt_select_sec` | 0 | Minimum duration for a cohort utterance (none). |
-| | `per_spk_select_order` | `shuffle` | Pick the utterances at random (alternatives: longest / shortest first). |
+| | `per_spk_select_order` | `shuffle` | Shuffle each speaker's utterance list (NumPy RNG seeded with 0 at script start) and take the first `num_utt_per_spk`; alternatives: longest / shortest first. |
 | `asnorm_full.yaml` | `adaptive_cohort_size` | 500 | Top-k cohort scores used for the mean/std in adaptive s-norm. |
 | | `average_spk` | `true` | Average each speaker's cohort embeddings into one vector before scoring. |
 | `decode_qmf_full.yaml` | extraction keys | as above | Applied to QMF-training utterances. |
 | | `qmf_dur_thresh` | 6 | Duration (s) separating "short" and "long" utterances when building QMF training trials. |
-| | `qmf_num_trial_per_condition` | 10000 | Trials generated per condition: target and non-target × {short–short, long–long, long–short} = 6 × 10 000. |
+| | `qmf_num_trial_per_condition` | 10000 | Sampling *attempts* per condition, for target and non-target × {short–short, long–long, long–short} (6 × 10 000). Duplicate or ineligible pairs are skipped without redraw, so the final list is somewhat smaller than 60 000 and not exactly balanced. |
 
 ---
 

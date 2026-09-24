@@ -85,7 +85,7 @@ frames.
 ```yaml
 # cohort selection
 num_cohort_spk: 5994          # all VoxCeleb2-dev speakers (first 5994 lines of spk2utt)
-num_utt_per_spk: 10           # utterances per speaker, chosen at random (no fixed seed)
+num_utt_per_spk: 10           # utterances per speaker: shuffled (NumPy seed 0), first 10 taken
 utt_select_sec: 0             # no minimum duration
 # normalisation
 average_spk: true             # one cohort vector per speaker
@@ -110,14 +110,17 @@ qmf_num_trial_per_condition: 10000
 
 **Training trials** are built from VoxCeleb2 dev, excluding utterances shorter than 2 s and the
 utterances used in the AS-Norm cohort; speakers need ≥ 2 usable utterances in a duration class to
-be eligible. Six conditions × 10 000 trials are sampled at random (no fixed seed; exact duplicates
-dropped):
+be eligible. The generator seeds NumPy with 0 and makes 10 000 sampling attempts per condition:
 
-| Condition | Target (same speaker) | Non-target (different speakers) |
+| Condition | Target attempts (same speaker) | Non-target attempts (different speakers) |
 |---|---|---|
 | short – short | 10 000 | 10 000 |
 | long – long | 10 000 | 10 000 |
 | long – short | 10 000 | 10 000 |
+
+Duplicate pairs and draws that fail the eligibility check are skipped without a replacement draw,
+so the final list is somewhat smaller than 60 000 and not exactly balanced; the generated
+`qmf_train_label` file is the authoritative list.
 
 These trials are scored exactly like test trials (cosine, then AS-Norm with the same cohort).
 
@@ -152,9 +155,11 @@ architectural keys differ. Config pairs and diffs are in `ablations.md`.
   warm-up-then-cosine schedule, the schedule starts at `min_lr`; (iii) the AS-Norm cohort is
   speaker-averaged (5 994 vectors) before the top-500 selection, which the paper does not spell out.
 - All numbers are from single runs, `seed: 0`; run-to-run variance was not measured.
-- Two scoring steps are randomised without a fixed seed: the choice of 10 cohort utterances per
-  speaker and the sampling of QMF training trials. Their effect on EER is expected to be small
-  but has not been quantified.
+- The cohort-utterance and QMF-trial generators both seed NumPy with 0, so their sampling is
+  deterministic given identical inputs. Two things still vary between environments: the QMF
+  generator iterates Python sets whose order depends on the interpreter's hash seed, and the recipe
+  reuses previously generated cohort / QMF lists if they exist. The sensitivity of the final EER to
+  these lists has not been measured.
 - Every reported number is the final-epoch checkpoint (`latest.pth`) of a run of fixed length
   (20 epochs, then 2).
 - Parameter counts (6.92 M etc.) exclude the loss anchors.

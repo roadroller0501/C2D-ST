@@ -3,10 +3,12 @@
 PyTorch-style pseudo-code for every module of C2D-ST, written from the specification in
 [`architecture_spec.md`](architecture_spec.md). It is **not the training code**: it mirrors the
 in-house implementation module by module but uses only plain PyTorch (no NATTEN, no flash-attn),
-has not been used to produce the paper's numbers, and its parameter layout (e.g. the channel
-order of the fused `qkv` projection) may differ from the internal checkpoints. Shapes are checked
-by hand; an analytic parameter count of this code reproduces the parameter column of Tables 2–4
-for all seven systems (see the table in [`architecture_spec.md`](architecture_spec.md)).
+has not been used to produce the paper's numbers, and is not checkpoint-compatible with the
+internal implementation: the `qkv` projections are unpacked per head as in the original, but
+parameter names, buffer shapes and the compact RPB tables differ (see §2). Shapes were checked by
+hand, not by running the code. The analytic parameter counts in
+[`architecture_spec.md`](architecture_spec.md) refer to the specification with full-size RPB tables;
+this code has 8,100 fewer RPB elements.
 
 Conventions: `B` batch, `T` frames (after the stem, 20 ms), `F` mel bins on the current grid,
 `C` channels. Grid tensors are channel-last `(B, T, F, C)`; the flattened "1D form" is `(B, T, F·C)`.
@@ -84,8 +86,12 @@ Drop-path schedule (`drop_path_rate: 0.1`, `linear`): layer `ℓ` of the 24 atte
 
 Every query attends to the `k×k` window centred on itself. The grid is zero-padded by `k//2` so
 that border queries keep a full, centred window; keys that fall into the padding are masked out.
-The implementation below uses `F.unfold` to materialise the neighbourhoods (the internal code
-does the same with NATTEN's unfused `na2d_qk` / `na2d_av`; results are identical).
+The implementation below uses `F.unfold` to materialise the neighbourhoods; the internal code does
+the same with NATTEN's unfused `na2d_qk` / `na2d_av`. The computation is the same, but the RPB
+table here is stored compactly with one entry per used offset (`k·k`), whereas the internal code
+keeps NATTEN's full `(2k−1)×(2k−1)` table (2D) and `2k−1` (1D) per head and only ever indexes its
+centre block — 8,100 fewer parameters in total for the main model, and a different tensor layout to
+remap if weights were ever transferred.
 
 ```python
 class NeighborhoodAttention2D(nn.Module):
@@ -95,7 +101,7 @@ class NeighborhoodAttention2D(nn.Module):
         self.qkv = nn.Linear(dim, 3 * dim)
         self.proj = nn.Linear(dim, dim)
         # relative position bias for the k*k offsets of a centred window
-        # (equals the centre k×k sub-block of NATTEN's (2k-1)×(2k-1) table)
+        # (the internal code stores NATTEN's (2k-1)×(2k-1) table and uses only its centre k×k block)
         self.rpb = nn.Parameter(torch.zeros(heads, k * k))
         nn.init.trunc_normal_(self.rpb, std=0.02, a=-0.04, b=0.04)
         # value-side relative positional encoding (Table 3 ablation removes this)
@@ -106,7 +112,7 @@ class NeighborhoodAttention2D(nn.Module):
     def forward(self, x):                                   # x: (B, T, F, C)
         B, T, Fq, C = x.shape
         h, dh, k, P = self.h, self.dh, self.k, self.k * self.k
-        q, kk, v = self.qkv(x).view(B, T, Fq, 3, h, dh).unbind(3)          # each (B, T, F, h, dh)
+        q, kk, v = self.qkv(x).view(B, T, Fq, h, 3, dh).unbind(4)          # per-head [q|k|v] packing, each (B, T, F, h, dh)
         q = q * dh ** -0.5
 
         def as_image(t):                                     # (B, T, F, h, dh) -> (B*h, dh, T, F)
@@ -154,7 +160,7 @@ class NeighborhoodAttention1D(nn.Module):
     def forward(self, x):                                   # x: (B, T, C)
         B, T, C = x.shape
         h, dh, k = self.h, self.dh, self.k
-        q, kk, v = self.qkv(x).view(B, T, 3, h, dh).unbind(2)                # (B, T, h, dh)
+        q, kk, v = self.qkv(x).view(B, T, h, 3, dh).unbind(3)                # (B, T, h, dh)
         q = q * dh ** -0.5
         kk = F.pad(kk.permute(0, 2, 3, 1), (self.pad, self.pad)).unfold(3, k, 1)   # (B, h, dh, T, k)
         v  = F.pad(v.permute(0, 2, 3, 1),  (self.pad, self.pad)).unfold(3, k, 1)
@@ -204,7 +210,8 @@ def attend(q, k, v):                             # q,k,v: (B', L, h, dh) -> (B',
 ## 5. Axial attention (`axial_static_v1`)
 
 Half of the channels attend along frequency (T folded into the batch), the other half along time
-(F folded into the batch); each half has `n` heads of `d_h = C/(2n)`. RoPE on both axes; NTK
+(F folded into the batch); each half has `n` heads of `d_h = C/(2n)` — with the stage table above,
+`n` = 1/1/2/3/4 and `d_h` = 24/36/24/24/24. RoPE on both axes; NTK
 extrapolation on the time axis only.
 
 ```python
@@ -229,7 +236,7 @@ class AxialAttention(nn.Module):
             seq = qkv.reshape(B * T, Fq, -1)                                  # fold T into batch
             freqs = self.freqs_f
         L = seq.shape[1]
-        q, k, v = seq.view(seq.shape[0], L, 3, self.h, self.dh).unbind(2)     # (B', L, h, dh)
+        q, k, v = seq.view(seq.shape[0], L, self.h, 3, self.dh).unbind(3)     # (B', L, h, dh)
         out = attend(apply_rope(q, freqs), apply_rope(k, freqs), v)           # (B', L, dim/2)
         if along_time:
             return out.view(B, Fq, T, -1).transpose(1, 2)                     # (B, T, F, dim/2)
@@ -260,7 +267,7 @@ class GlobalAttention1D(nn.Module):              # final stage GA: 3 heads of 48
 
     def forward(self, x):                                                     # x: (B, T, C)
         B, T, C = x.shape
-        q, k, v = self.qkv(x).view(B, T, 3, self.h, self.dh).unbind(2)
+        q, k, v = self.qkv(x).view(B, T, self.h, 3, self.dh).unbind(3)
         freqs = self.freqs if self.training else ntk_extrapolate(self.freqs, T, self.L0, self.base, self.dh)
         return self.proj(attend(apply_rope(q, freqs), apply_rope(k, freqs), v))
 ```
@@ -365,8 +372,11 @@ class C2DST(nn.Module):
         return torch.cat(feats, dim=-1).transpose(1, 2)                   # (B, 1296, T)
 ```
 
-Initialisation (`init_style: v5`): leave PyTorch defaults for conv/linear (Kaiming-uniform,
-`a=√5`), zero biases; RPB/RPE trunc-normal(0.02); LayerScale 1e-5; aggregation weights 0.
+Initialisation (`init_style: v5`): PyTorch-default Kaiming-uniform (`a=√5`) for every conv/linear
+weight and **zero biases** — the constructors above leave PyTorch's default uniform bias init in
+place, so apply a reset loop over `nn.Conv2d/nn.Conv1d/nn.Linear` after building `C2DST` to match.
+RPB/RPE trunc-normal(0.02), LayerScale 1e-5, aggregation weights 0. Pooling and projector are not
+covered by that reset (PyTorch defaults).
 
 ---
 

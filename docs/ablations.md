@@ -64,7 +64,7 @@ the effective batch is still 1 536, and its LMFT uses `48 × 8 = 384`.)
 ```
 
 The frequency branch is removed; the time branch uses all `d` channels with `2n` heads of the
-same `d_h = 24` (instead of `n` heads over `d/2`). Feature dimension, number of heads and
+same `d_h = d/(2n)` — 36 in stage 2, 24 elsewhere — instead of `n` heads over `d/2`. Feature dimension, number of heads and
 parameter count are identical to the two-axis block; RoPE + NTK extrapolation on time as before.
 
 ---

@@ -136,7 +136,8 @@ See [`docs/ablations.md`](docs/ablations.md) for the exact diff of each variant 
 
 Scoring: full-length utterances, cosine scoring, AS-Norm with a speaker-averaged VoxCeleb2-dev
 cohort (top-500 adaptive), QMF = logistic regression on {score, log-duration max/min, embedding
-L1/L2-norm max/min} trained on 6 × 10 000 VoxCeleb2-dev trials. No SNR-based quality features.
+L1/L2-norm max/min} trained on VoxCeleb2-dev trials (6 × 10 000 sampling attempts across
+target/non-target and short/long conditions). No SNR-based quality features.
 Details in [`docs/training_and_scoring.md`](docs/training_and_scoring.md).
 
 ---
@@ -146,17 +147,18 @@ Details in [`docs/training_and_scoring.md`](docs/training_and_scoring.md).
 What the page fully specifies: the model (every layer, shape and initialisation —
 `docs/architecture_spec.md`, `docs/reference_pseudocode.md`), the training schedule and
 augmentation, and the scoring pipeline including the exact AS-Norm and QMF procedures
-(`docs/training_and_scoring.md`). An analytic parameter count of the specification matches the
-paper's parameter column for all seven systems.
+(`docs/training_and_scoring.md`). An analytic parameter count of the specification agrees with the
+paper's parameter column for all seven systems to within rounding (0.003–0.007 M).
 
 What you have to supply yourself: VoxCeleb1/2 audio at 16 kHz (VoxCeleb2 converted from m4a),
 the cleaned VoxCeleb1 trial lists, MUSAN and RIRS_NOISES, sox for speed perturbation, and a
 training loop that implements the batching / accumulation / mixed-precision settings described in
 `docs/config_reference.md` §2.6–2.7.
 
-What is inherently not reproducible bit-exactly: GPU non-determinism, the random cohort-utterance
-and QMF-trial selection (no fixed seed), and the exact parameter layout of our checkpoints.
-Expect small deviations from the reported EERs rather than identical numbers.
+What is not reproducible bit-exactly: GPU non-determinism, the exact cohort and QMF-trial lists
+(the generators are seeded, but one of them iterates Python sets whose order depends on the
+interpreter's hash seed), and the parameter layout of our checkpoints, which the pseudo-code does
+not match. Expect small deviations from the reported EERs rather than identical numbers.
 
 ## Software used (for the record)
 

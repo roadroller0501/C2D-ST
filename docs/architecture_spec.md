@@ -3,7 +3,7 @@
 This page specifies every component of C2D-ST in enough detail to re-implement it, and explains
 what each key of the released YAML configs controls. Module-level PyTorch pseudo-code for the same
 components is in [`reference_pseudocode.md`](reference_pseudocode.md). An analytic parameter count of
-this specification reproduces the paper's Tables 2–4 for every variant:
+this specification agrees with the paper's Tables 2–4 to within rounding for every variant:
 
 | Variant | Spec count | Paper |
 |---|---|---|
@@ -15,8 +15,10 @@ this specification reproduces the paper's Tables 2–4 for every variant:
 | 2D NA → ConvNeXt | 6.967 M | 6.97 M |
 | 1D NA → ConvNeXt | 6.936 M | 6.94 M |
 
-(The spec count excludes the loss anchors; a constant ≈0.005 M is unaccounted for in all rows,
-while every difference between variants matches the paper to the reported precision.)
+(Counts exclude the loss anchors. For C2D-ST the exact count is 6,913,172 elements, of which 32 are
+the frozen stage-1 aggregation weights. Every row is 0.003–0.007 M below the paper's rounded value;
+the source of that small, roughly constant residual has not been identified. Every *difference*
+between variants matches the paper to the reported precision.)
 
 Where the 6.91 M of C2D-ST sit (analytic count of the specification below):
 
@@ -90,7 +92,9 @@ flattened form is what the list of stage outputs carries.
 | 4 | 1 | 40 | 64 | 144 | 3 | 6 | 3 | 3rd |
 | 5 | 2 | 20 | 128 | 192 | 4 | 8 | 4 | 4th |
 
-16 layers total. NA heads = d/24, axial heads per axis = d/48. Name decoding: `s5` five stages,
+16 layers total. NA heads = d/24. Axial heads per axis are 1/1/2/3/4 — the `div48` in the name is a
+convention, not an exact formula: stage 2 (d = 72) has 1 head per axis with `d_h = 36`, all other
+stages have `d_h = 24`. Name decoding: `s5` five stages,
 `d2-2` two ↓2 frequency down-samplings (stages 2 and 5), `s` small width set, `16l` 16 layers,
 `k7` 7×7 NA window, `div24`/`div48` head divisors, `g1` one global (axial) block per stage
 (`g0` = none). Frequency down-sampling is ReDimNet-style: when F is halved, c is doubled by the
@@ -159,11 +163,13 @@ be obtained with an `unfold`-based implementation at higher memory cost.
 
 ### 2.5 Axial attention (`ga_type_2d: axial_static_v1`)
 
-`qkv = Linear(d → 3d)`, `proj = Linear(d → d)`, heads per axis `n = d/48`, `d_h = d/(2n) = 24`.
+`qkv = Linear(d → 3d)`, `proj = Linear(d → d)`, heads per axis `n = 1/1/2/3/4` for the five stages,
+`d_h = d/(2n)` = 24/36/24/24/24.
 
 ```
-q, k, v = split(qkv(x))                                   # each (B, T, F, d)
-(q₁,k₁,v₁), (q₂,k₂,v₂) = split channels in half            # d/2 each, n heads of d_h
+packed_f, packed_t = split(qkv(x) into two halves)         # 3d/2 channels each
+# inside each half: view as (n heads, 3·d_h) and split q/k/v per head
+(q₁,k₁,v₁) = unpack(packed_f);  (q₂,k₂,v₂) = unpack(packed_t)   # d/2 per q, k, v
 # frequency axis: fold T into batch
 a₁ = Attn( RoPE(q₁), RoPE(k₁), v₁ )  over F  →  (B·T, F, d/2)
 # time axis: fold F into batch
@@ -232,7 +238,7 @@ biases 0. RPB/RPE: trunc-normal(std 0.02, ±0.04). LayerScale γ = 1e-5. Aggrega
 
 | Config | Specification |
 |---|---|
-| `pooling: chn_attn_stat` | ECAPA attentive statistics pooling on `(B, 1296, T)`: context = concat(x, mean_t(x), std_t(x)) → `Conv1d(3·1296 → 128, k=1)` → ReLU → BatchNorm1d → `Conv1d(128 → 1296, k=1)` → softmax over t → attention-weighted mean μ and std σ (clamped to [1e-4, 1e4]) → concat → 2592-dim. |
+| `pooling: chn_attn_stat` | ECAPA attentive statistics pooling on `(B, 1296, T)`: context = concat(x, mean_t(x), std_t(x)) → `Conv1d(3·1296 → 128, k=1)` → ReLU → BatchNorm1d → `Conv1d(128 → 1296, k=1)` → softmax over t → attention-weighted mean μ and std σ (the variance is clamped to [1e-4, 1e4] before the square root, both for the context statistics and for the pooled output) → concat → 2592-dim. |
 | `projector: rawnet3`, `output_size: 192` | `BatchNorm1d(2592) → Linear(2592 → 192)` = speaker embedding. |
 | `loss: sphereface2` | SphereFace2, C-type (CosFace-style additive margin on the cosine): `scale 32`, `margin 0.2` (pretrain) / `0.3` (LMFT), `t 3`, `lambda_ 0.7`, learnable scalar bias initialised to 0. Binary-classification formulation with `g(z) = 2·((z+1)/2)^t − 1`: loss = λ·softplus(−s·(g(cos_y) − m) − b) + (1−λ)·Σ_{j≠y} softplus(s·(g(cos_j) + m) + b), averaged over the batch. Anchors L2-normalised. |
 

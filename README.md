@@ -131,7 +131,7 @@ See [`docs/ablations.md`](docs/ablations.md) for the exact diff of each variant 
 | LR | cosine, peak 8e-3, 10 % linear warm-up, single cycle, min 8e-8 | cosine, peak 3e-4, 10 % warm-up, min 3e-8 |
 | Loss | SphereFace2 (C-type), s = 32, m = 0.2, t = 3, λ = 0.7 | m = 0.3; anchors initialised from the pretrained matrix (speed-1.0 rows) |
 | Init | PyTorch-default Kaiming-uniform for all conv/linear (`init_style: v5`) | pretrained final-epoch weights |
-| Precision | mixed (AMP) | mixed (AMP) |
+| Precision | bfloat16 autocast (fp32 master weights) | same |
 | Weights evaluated | final epoch (`latest.pth`) | final epoch (`latest.pth`) |
 
 Scoring: full-length utterances, cosine scoring, AS-Norm with a speaker-averaged VoxCeleb2-dev

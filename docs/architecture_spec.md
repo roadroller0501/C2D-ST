@@ -306,6 +306,9 @@ batch is `batch_size × accum_grad`. Steps per epoch = `num_iters_per_epoch / ac
 
 The YAMLs carry commented-out blocks for other GPU counts that keep the effective batch fixed.
 
-Other flags: `use_amp: true`, `iterator_type: random` (random utterance sampling, one random
+Other flags: `use_amp: true` — this is **bfloat16** autocast, not fp16: the trainer enables
+autocast with `dtype=torch.bfloat16` when the GPU supports it and otherwise runs in fp32 (a
+GradScaler is also instantiated but is inconsequential with bf16). Master weights are fp32.
+`iterator_type: random` (random utterance sampling, one random
 crop each), `drop_last_iter: true`, `seed: 0`. Training runs for the fixed number of epochs and
 the final-epoch weights (`latest.pth`) are what is evaluated.

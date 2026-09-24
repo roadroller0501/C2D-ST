@@ -180,7 +180,7 @@ preprocessor_conf:
 | `valid_iterator_type` | `sequence` | Validation trials in file order. |
 | `shuffle_within_batch` | `false` | Keep the sampler's order inside a batch. |
 | `drop_last_iter` | `true` | Drop the last incomplete batch. |
-| `use_amp` | `true` | Mixed-precision (autocast + GradScaler). |
+| `use_amp` | `true` | Mixed precision with **bfloat16** autocast (fp32 master weights); on a GPU without bf16 support the trainer falls back to plain fp32. Also applied at embedding extraction. |
 | `grad_clip` | 9999 | L2 gradient-norm clipping threshold (effectively off). |
 | `keep_nbest_models` | 3 | Framework checkpoint-retention option (recipe default). The final-epoch checkpoint (`latest.pth`) is the one evaluated. |
 | `best_model_criterion` | `[[valid, eer, min]]` | Framework checkpoint-ranking option (recipe default); the validation set is the VoxCeleb1-O trial list. Not what is evaluated — see `latest.pth` above. |
@@ -224,7 +224,7 @@ scheduler_conf:
 | `decode_full.yaml` | `target_duration` | −2560 | Negative → use the whole utterance (up to 2560 s); positive would mean fixed-length crops. |
 | | `num_eval` | 1 | Number of crops per utterance (irrelevant for full-length). |
 | | `average_embd` | `true` | Average the crop embeddings into one per utterance. |
-| | `valid_batch_size` / `num_workers` | 1 / 1 | One utterance per forward pass (variable length). |
+| | `valid_batch_size` / `num_workers` | 1 / 1 | One utterance per forward pass. Keep this at 1 for full-length extraction: with a larger batch the extractor truncates every utterance in the batch to the shortest one. |
 | `decode_cohort_full.yaml` | same extraction keys | | Applied to cohort utterances. |
 | | `num_cohort_spk` | 5994 | Number of VoxCeleb2-dev speakers used as cohort (all). |
 | | `num_utt_per_spk` | 10 | Utterances selected per cohort speaker. |

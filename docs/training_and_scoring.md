@@ -24,7 +24,7 @@ filtering** is applied to the training utterances.
 
 - Speed-perturbed VoxCeleb2 dev, random 3 s crops, MUSAN (p 0.5) + RIR (p 0.5) — §4 of the spec.
 - 20 epochs, effective batch 1 536, AdamW (wd 0.05), single cosine cycle, peak lr 8e-3, 10 %
-  linear warm-up, min lr 8e-8, AMP.
+  linear warm-up, min lr 8e-8, bfloat16 autocast (fp32 master weights).
 - Batching: each epoch is one random permutation of all training utterances (re-seeded with the
   epoch index), cut into global batches of 64; the last incomplete batch is dropped. One random
   crop per utterance per epoch.
@@ -53,7 +53,7 @@ Initialised from the phase-1 final weights (`init_param`), including the loss an
 | `extra_len` | 150 | **300** |
 | `num_eval` (validation crops) | 5 | 3 |
 
-Everything else (architecture, optimizer, weight-decay exclusions, AMP) is unchanged. The active
+Everything else (architecture, optimizer, weight-decay exclusions, bf16 autocast) is unchanged. The active
 batch block in the YAML is the 4-GPU one; framework defaults not written in the YAML are listed in
 `config_reference.md` §4.
 
@@ -70,7 +70,9 @@ valid_batch_size: 1      # one utterance per forward pass (variable length)
 ```
 
 One embedding per full-length utterance for test, cohort and QMF-training utterances alike. The
-model is in eval mode: no augmentation, BatchNorm in inference mode, and the NTK RoPE
+model is in eval mode: no augmentation, BatchNorm in inference mode, the forward pass runs under
+the same bfloat16 autocast as training with the embedding cast back to fp32 before saving (raw
+projector output, not L2-normalised — the QMF norm features rely on this), and the NTK RoPE
 extrapolation is active whenever the utterance exceeds 150 (phase-1 model) or 300 (LMFT model)
 frames.
 

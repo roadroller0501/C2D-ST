@@ -2,43 +2,10 @@
 
 This page specifies every component of C2D-ST in enough detail to re-implement it, and explains
 what each key of the released YAML configs controls. Module-level PyTorch pseudo-code for the same
-components is in [`reference_pseudocode.md`](reference_pseudocode.md). An analytic parameter count of
-this specification agrees with the paper's Tables 2–4 to within rounding for every variant:
+components is in [`reference_pseudocode.md`](reference_pseudocode.md). Reported parameter counts
+are listed in the [README](../README.md), following the paper's Tables 1–4.
 
-| Variant | Spec count | Paper |
-|---|---|---|
-| C2D-ST | 6.913 M | 6.92 M |
-| Axial → 1D | 9.754 M | 9.76 M |
-| Axial → NA | 6.944 M | 6.95 M |
-| Time-only axial | 6.913 M | 6.92 M |
-| RPB only | 6.823 M | 6.83 M |
-| 2D NA → ConvNeXt | 6.967 M | 6.97 M |
-| 1D NA → ConvNeXt | 6.936 M | 6.94 M |
-
-(Counts exclude the loss anchors. For C2D-ST the exact count is 6,913,172 elements, of which 32 are
-the frozen stage-1 aggregation weights. Every row is 0.003–0.007 M below the paper's rounded value;
-the source of that small, roughly constant residual has not been identified. Every *difference*
-between variants matches the paper to the reported precision.)
-
-Where the 6.91 M of C2D-ST sit (analytic count of the specification below):
-
-| Component | Params | Share |
-|---|---|---|
-| Stem (Conv2d 1→32 + BN) | 0.000 M | 0.0 % |
-| Stage 1 (width 48, 3 blocks) | 0.094 M | 1.4 % |
-| Stage 2 (width 72, 3 blocks) | 0.208 M | 3.0 % |
-| Stage 3 (width 96, 3 blocks) | 0.360 M | 5.2 % |
-| Stage 4 (width 144, 3 blocks) | 0.789 M | 11.4 % |
-| Stage 5 (width 192, 4 blocks) | 1.865 M | 27.0 % |
-| Final aggregation + BN + Linear 2560→144 | 0.389 M | 5.6 % |
-| Final 1D temporal stage (8 blocks, width 144) | 2.040 M | 29.5 % |
-| Attentive statistics pooling (on 1296-dim) | 0.665 M | 9.6 % |
-| Projector (BN + Linear 2592→192) | 0.503 M | 7.3 % |
-| **Total** | **6.913 M** | |
-
-Each stage's count includes its aggregation weights, in/out norms and the two projections. The
-2D backbone is 48 % of the model; the final 1D stage, despite its width of 144, is 30 % because
-of its 8 blocks. Tensor shapes are written channel-last as
+Tensor shapes are written channel-last as
 `(B, T, F, C)` unless stated otherwise; `B` batch, `T` frames, `F` mel bins, `C` channels.
 
 ---
@@ -228,9 +195,10 @@ Blocks have the same pre-norm / LayerScale / DropPath / SwiGLU structure as §2.
 
 ### 2.8 Initialisation (`init_style: v5`)
 
-All `Conv1d/Conv2d/Linear` weights: Kaiming-uniform with `a = √5`, fan-in (PyTorch default);
+Encoder `Conv1d/Conv2d/Linear` weights: Kaiming-uniform with `a = √5`, fan-in (PyTorch default);
 biases 0. RPB/RPE: trunc-normal(std 0.02, ±0.04). LayerScale γ = 1e-5. Aggregation weights 0
-(uniform after softmax). Loss anchors: Xavier-uniform.
+(uniform after softmax). Pooling and projector are outside the encoder reset and retain PyTorch
+defaults. Loss anchors: Xavier-uniform.
 
 ---
 
@@ -246,7 +214,7 @@ biases 0. RPB/RPE: trunc-normal(std 0.02, ±0.04). LayerScale γ = 1e-5. Aggrega
 matrix has `3 × 5994` rows (ordering: original speaker ids, then the 0.9× copies, then the 1.1×
 copies). With `jt: true` the LMFT loss allocates a `(3·5994, 192)` matrix so that the pretrained
 anchors load without shape mismatch, and uses only the first 5994 rows (speed-1.0 anchors) in
-the forward pass; the other two thirds receive no gradient.
+the forward pass.
 
 ---
 
@@ -306,9 +274,7 @@ batch is `batch_size × accum_grad`. Steps per epoch = `num_iters_per_epoch / ac
 
 The YAMLs carry commented-out blocks for other GPU counts that keep the effective batch fixed.
 
-Other flags: `use_amp: true` — this is **bfloat16** autocast, not fp16: the trainer enables
-autocast with `dtype=torch.bfloat16` when the GPU supports it and otherwise runs in fp32 (a
-GradScaler is also instantiated but is inconsequential with bf16). Master weights are fp32.
+Other flags: `use_amp: true` enables automatic mixed precision.
 `iterator_type: random` (random utterance sampling, one random
 crop each), `drop_last_iter: true`, `seed: 0`. Training runs for the fixed number of epochs and
 the final-epoch weights (`latest.pth`) are what is evaluated.

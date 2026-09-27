@@ -130,8 +130,7 @@ See [`docs/ablations.md`](docs/ablations.md) for the exact diff of each variant 
 | Optimizer | AdamW, wd 0.05 (no wd on norms, biases, RPB, LayerScale, aggregation weights) | same |
 | LR | cosine, peak 8e-3, 10 % linear warm-up, single cycle, min 8e-8 | cosine, peak 3e-4, 10 % warm-up, min 3e-8 |
 | Loss | SphereFace2 (C-type), s = 32, m = 0.2, t = 3, λ = 0.7 | m = 0.3; anchors initialised from the pretrained matrix (speed-1.0 rows) |
-| Init | PyTorch-default Kaiming-uniform for all conv/linear (`init_style: v5`) | pretrained final-epoch weights |
-| Precision | bfloat16 autocast (fp32 master weights) | same |
+| Init | Encoder conv/linear: Kaiming-uniform, zero biases (`init_style: v5`); pooling/projector: PyTorch defaults | pretrained final-epoch weights |
 | Weights evaluated | final epoch (`latest.pth`) | final epoch (`latest.pth`) |
 
 Scoring: full-length utterances, cosine scoring, AS-Norm with a speaker-averaged VoxCeleb2-dev
@@ -147,8 +146,7 @@ Details in [`docs/training_and_scoring.md`](docs/training_and_scoring.md).
 What the page fully specifies: the model (every layer, shape and initialisation —
 `docs/architecture_spec.md`, `docs/reference_pseudocode.md`), the training schedule and
 augmentation, and the scoring pipeline including the exact AS-Norm and QMF procedures
-(`docs/training_and_scoring.md`). An analytic parameter count of the specification agrees with the
-paper's parameter column for all seven systems to within rounding (0.003–0.007 M).
+(`docs/training_and_scoring.md`).
 
 What you have to supply yourself: VoxCeleb1/2 audio at 16 kHz (VoxCeleb2 converted from m4a),
 the cleaned VoxCeleb1 trial lists, MUSAN and RIRS_NOISES, sox for speed perturbation, and a
@@ -162,9 +160,9 @@ not match. Expect small deviations from the reported EERs rather than identical 
 
 ## Software used (for the record)
 
-- Python 3, PyTorch 2.x with mixed precision; `scaled_dot_product_attention` as the attention fallback
+- Python 3, PyTorch 2.x with mixed precision
 - NATTEN with the unfused functional API (`na2d_qk`/`na2d_av`, `na1d_qk`/`na1d_av`); fused NA disabled
-- flash-attn for axial / global attention when available (numerically equivalent to the SDPA fallback)
+- Axial / global attention implements scaled dot-product attention, using flash-attn or PyTorch SDPA
 - ESPnet-SPK pipeline (data preparation, speed perturbation, training loop, scoring scripts), in-house fork
 
 ---

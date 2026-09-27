@@ -6,9 +6,8 @@ in-house implementation module by module but uses only plain PyTorch (no NATTEN,
 has not been used to produce the paper's numbers, and is not checkpoint-compatible with the
 internal implementation: the `qkv` projections are unpacked per head as in the original, but
 parameter names, buffer shapes and the compact RPB tables differ (see §2). Shapes were checked by
-hand, not by running the code. The analytic parameter counts in
-[`architecture_spec.md`](architecture_spec.md) refer to the specification with full-size RPB tables;
-this code has 8,100 fewer RPB elements.
+hand, not by running the code. The compact RPB tables differ from the full-size tables described
+in [`architecture_spec.md`](architecture_spec.md).
 
 Conventions: `B` batch, `T` frames (after the stem, 20 ms), `F` mel bins on the current grid,
 `C` channels. Grid tensors are channel-last `(B, T, F, C)`; the flattened "1D form" is `(B, T, F·C)`.

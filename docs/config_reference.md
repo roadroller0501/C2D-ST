@@ -46,7 +46,7 @@ Several keys select a module by name. These are the names used in the released f
 | `redim_*_norm_type`, `norm_1d_type`, `fin_norm_1d_type` | `bn` / `ln` / `identity` | BatchNorm over channels (channel-last), LayerNorm over channels, or no norm. |
 | `redim_aggregation_type` | `ws2d` | Softmax-weighted sum of stage outputs with one weight per input per grid channel, performed on the 2D grid (spec §2.3). |
 | `activation_type` | `swish` | SiLU, used inside the FFNs and ConvNeXt blocks. |
-| `init_style` | `v5` | PyTorch-default Kaiming-uniform for conv/linear, zero bias (spec §2.8). |
+| `init_style` | `v5` | Encoder conv/linear weights: PyTorch-default Kaiming-uniform, zero bias. Pooling/projector retain PyTorch defaults (spec §2.8). |
 | `extra_type` | `ntk` | NTK-aware RoPE frequency rescaling at inference for time sequences longer than `extra_len` (spec §2.5). |
 | `drop_path_policy` | `linear` | Stochastic-depth rate grows linearly with depth from 0 to `2·drop_path_rate`. |
 | `normalize` (frontend) | `mvn` | Per-utterance mean/variance normalisation of each log-Mel bin over time. |
@@ -180,7 +180,7 @@ preprocessor_conf:
 | `valid_iterator_type` | `sequence` | Validation trials in file order. |
 | `shuffle_within_batch` | `false` | Keep the sampler's order inside a batch. |
 | `drop_last_iter` | `true` | Drop the last incomplete batch. |
-| `use_amp` | `true` | Mixed precision with **bfloat16** autocast (fp32 master weights); on a GPU without bf16 support the trainer falls back to plain fp32. Also applied at embedding extraction. |
+| `use_amp` | `true` | Enable automatic mixed precision. Also applied at embedding extraction. |
 | `grad_clip` | 9999 | L2 gradient-norm clipping threshold (effectively off). |
 | `keep_nbest_models` | 3 | Framework checkpoint-retention option (recipe default). The final-epoch checkpoint (`latest.pth`) is the one evaluated. |
 | `best_model_criterion` | `[[valid, eer, min]]` | Framework checkpoint-ranking option (recipe default); the validation set is the VoxCeleb1-O trial list. Not what is evaluated — see `latest.pth` above. |
@@ -254,7 +254,7 @@ how the runs were executed are:
 | `train_shape_file`, `valid_shape_file` | paths | Per-utterance sample counts (from the statistics stage). |
 | `batch_type` | `folded` | Length-bucketed batching with `fold_length: [120000]` samples; irrelevant here because training crops are fixed-length. |
 | `sort_in_batch`, `sort_batch` | `descending` | Ordering inside/among batches (no effect for fixed-length crops). |
-| `train_dtype` | float32 | Master weights in fp32 (AMP handles the fp16 compute). |
+| `train_dtype` | float32 | Master weights in fp32. |
 | `grad_clip_type` | 2.0 | L2 norm for `grad_clip`. |
 | `resume` | true | Resume from the last checkpoint if present. |
 | `save_strategy` | all | Save full checkpoints. |
